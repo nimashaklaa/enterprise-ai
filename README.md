@@ -132,13 +132,25 @@ pip install -r requirements.txt
 
 
 3. **Configure Environment Variables**:
-Create a `.env` file in the root directory and configure your keys for AWS, Pinecone, PostgreSQL, and Bedrock:
+Copy `.env.example` to `.env` in the root directory, then replace the placeholder values with your AWS, Pinecone, PostgreSQL, and observability settings. `.env.example` lists the supported environment variables; never commit real credentials.
 ```env
-AWS_ACCESS_KEY_ID=your_access_key
-AWS_SECRET_ACCESS_KEY=your_secret_key
-PINECONE_API_KEY=your_pinecone_key
+AWS_ACCESS_KEY=your_aws_access_key
+AWS_SECRET_KEY=your_aws_secret_key
+PINECONE_API_KEY=your_pinecone_api_key
 DATABASE_URL=postgresql://user:password@localhost:5432/enterprise_ai
-BEDROCK_REGION=us-east-1
+AWS_REGION=us-east-1
+S3_BUCKET=your_s3_bucket
+BEDROCK_EMBED_MODEL=your_bedrock_embedding_model_id
+BEDROCK_CHAT_MODEL=your_bedrock_chat_model_id
+EMBEDDING_DIMENSION=1024
+PINECONE_INDEX_HOST=your_pinecone_index_host
+PINECONE_CLOUD=aws
+PINECONE_REGION=us-east-1
+PINECONE_READY_TIMEOUT=60
+RUIS_API_KEY=your_rius_api_key
+RUIS_SERVICE_NAME=enterprise-ai
+RUIS_DISABLED=false
+RUIS_CAPTURE_CONTENT=false
 
 ```
 
