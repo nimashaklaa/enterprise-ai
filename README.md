@@ -43,6 +43,71 @@ graph TD
 
 ---
 
+## 🗄️ Database ER Diagram
+
+The current PostgreSQL schema is defined in [infra/schema.sql](infra/schema.sql). It is intentionally compact and uses tenant-scoped records rather than deep relational joins, so the relationships below are logical relationships by `tenant_id` and `conversation_id` rather than enforced foreign keys.
+
+```mermaid
+erDiagram
+    DOCUMENTS {
+        uuid id PK
+        text tenant_id
+        text title
+        text owner_sub
+        text[] allowed_groups
+        text s3_key UK
+        text status
+        integer current_version
+        timestamptz created_at
+    }
+
+    FEEDBACK {
+        bigint id PK
+        text tenant_id
+        text actor
+        integer rating
+        text note
+        timestamptz created_at
+    }
+
+    AUDIT_EVENTS {
+        bigint id PK
+        text actor
+        text tenant_id
+        text action
+        jsonb detail
+        timestamptz created_at
+    }
+
+    APPROVALS {
+        uuid id PK
+        text tenant_id
+        text requester
+        text question
+        text status
+        text reviewer
+        timestamptz created_at
+        timestamptz reviewed_at
+    }
+
+    CHAT_MESSAGES {
+        bigint id PK
+        text tenant_id
+        uuid conversation_id
+        text role
+        text content
+        timestamptz created_at
+    }
+
+    DOCUMENTS ||--o{ FEEDBACK : tenant_id
+    DOCUMENTS ||--o{ AUDIT_EVENTS : tenant_id
+    DOCUMENTS ||--o{ APPROVALS : tenant_id
+    DOCUMENTS ||--o{ CHAT_MESSAGES : tenant_id
+    CHAT_MESSAGES }o--o{ DOCUMENTS : logical 
+```
+
+---
+
 ## 🚀 Key Features & Components
 
 ### 1. Frontend & User Interface (`Users`)
