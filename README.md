@@ -45,13 +45,18 @@ graph TD
 
 ## 🗄️ Database ER Diagram
 
-The current PostgreSQL schema is defined in [infra/schema.sql](infra/schema.sql). It is intentionally compact and uses tenant-scoped records rather than deep relational joins, so the relationships below are logical relationships by `tenant_id` and `conversation_id` rather than enforced foreign keys.
+The current PostgreSQL schema is defined in [infra/schema.sql](infra/schema.sql). Each tenant-scoped table has a foreign key to `tenants.id`. `conversation_id` groups messages within `chat_messages` and is not a foreign key. For an existing database, apply [the tenant foreign-key migration](infra/migrations/001_tenant_foreign_keys.sql); it registers existing tenant IDs before adding the constraints. External tenant provisioning must insert each tenant into `tenants` before writing that tenant's records.
 
 ```mermaid
 erDiagram
+    TENANTS {
+        text id PK
+        timestamptz created_at
+    }
+
     DOCUMENTS {
         uuid id PK
-        text tenant_id
+        text tenant_id FK
         text title
         text owner_sub
         text[] allowed_groups
@@ -63,7 +68,7 @@ erDiagram
 
     FEEDBACK {
         bigint id PK
-        text tenant_id
+        text tenant_id FK
         text actor
         integer rating
         text note
@@ -73,7 +78,7 @@ erDiagram
     AUDIT_EVENTS {
         bigint id PK
         text actor
-        text tenant_id
+        text tenant_id FK
         text action
         jsonb detail
         timestamptz created_at
@@ -81,7 +86,7 @@ erDiagram
 
     APPROVALS {
         uuid id PK
-        text tenant_id
+        text tenant_id FK
         text requester
         text question
         text status
@@ -92,18 +97,18 @@ erDiagram
 
     CHAT_MESSAGES {
         bigint id PK
-        text tenant_id
+        text tenant_id FK
         uuid conversation_id
         text role
         text content
         timestamptz created_at
     }
 
-    DOCUMENTS ||--o{ FEEDBACK : tenant_id
-    DOCUMENTS ||--o{ AUDIT_EVENTS : tenant_id
-    DOCUMENTS ||--o{ APPROVALS : tenant_id
-    DOCUMENTS ||--o{ CHAT_MESSAGES : tenant_id
-    CHAT_MESSAGES }o--o{ DOCUMENTS : logical 
+    TENANTS ||--o{ DOCUMENTS : has
+    TENANTS ||--o{ FEEDBACK : has
+    TENANTS ||--o{ AUDIT_EVENTS : has
+    TENANTS ||--o{ APPROVALS : has
+    TENANTS ||--o{ CHAT_MESSAGES : has
 ```
 
 ---
