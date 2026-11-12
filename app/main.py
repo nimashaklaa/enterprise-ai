@@ -168,3 +168,12 @@ def decide(approval_id:uuid.UUID,body:ApprovalDecision,p:Principal=Depends(princ
         audit(conn,p.subject,p.tenant,'approval_decided',{'id':str(approval_id),'approved':body.approve})
     # Approval is a decision record only; it never automatically executes a destructive action.
     return {'status':'approved' if body.approve else 'rejected','executed':False}
+
+@app.get('/api/admin/guardrails')
+def guardrail_metrics(p:Principal=Depends(principal)):
+    if not p.admin: raise HTTPException(403,'Admin only')
+    with connection() as conn:
+        rows=conn.execute("""SELECT action,count(*) AS total FROM audit_events
+            WHERE tenant_id=%s AND action IN ('guardrail_input_blocked','guardrail_output_blocked')
+            GROUP BY action ORDER BY action""",(p.tenant,)).fetchall()
+    return {'events':rows,'mode':'deterministic_demo','managed_bedrock_guardrails':False}
