@@ -2,6 +2,7 @@ import os
 import logging
 from functools import wraps
 from dotenv import load_dotenv
+import rius
 
 log=logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ def initialize():
         log.info("RIUS observability disabled.")
         return
     try:
-        import rius
+        
         rius.init(service_name=os.getenv("RIUS_SERVICE_NAME", "atlas-ai-fde"), capture_content=False)
         log.info("Rius observability enabled")
     except Exception as e:
@@ -22,7 +23,6 @@ def trace(name):
     """Decorator to trace a function call with Rius observability."""
     def decorator(func):
         try:
-            import rius
             return rius.observe(name=name, capture_input=False, capture_output=False)(func)
         except ImportError:
             return func
