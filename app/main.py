@@ -36,6 +36,17 @@ class Upload(BaseModel):
 class CompleteUpload(BaseModel):
     document_id:uuid.UUID
 
+class Ask(BaseModel):
+    question:str= Field(min_length=3, max_length=2000)
+    conversation_id:uuid.UUID|None=None
+
+class Feedback(BaseModel):
+    document_id:str|None=None
+    rating:int=Field(ge=-1,le=1)
+    note:str=Field(default='',max_length=500)
+
+class ApprovalDecision(BaseModel):
+    approve:bool
 
 @app.get('/', response_class=HTTPException)
 def home(request: Request):
@@ -89,3 +100,71 @@ def complete_upload(body:CompleteUpload, p:Principal=Depends(principal)):
     except Exception as exc:
         raise HTTPException(502,'Ingestion failed. Check server logs and document status.') from exec
     return{'status':'ready'}
+
+@app.get('/api/documents')
+def documents(p:Principal=Depends(principal)):
+    with connection() as conn:
+        rows=conn.execute('''SELECT id,title,status,current_version,created_at,allowed_groups FROM documents
+            WHERE tenant_id=%s AND (allowed_groups && %s::text[] OR owner_sub=%s)
+            ORDER BY created_at DESC LIMIT 100''',(p.tenant,list(p.groups),p.subject)).fetchall()
+    return{'documents':rows}
+
+
+@app.post('/api/chat')
+def ask(body: Ask,p:Principal=Depends(principal)):
+    reason= classify_input(body.question)
+    if reason:
+        with connection() as conn:
+            audit(conn,p.subject,p.tenant,'guardrail_input_blocked',{'reason':reason})
+        raise HTTPException(400,f'Input guardrail blocked this request ({reason}).')
+    if settings().hitl_enabled and any(x in body.question.lower() for x in ('delete','export','send to','update policy')):
+        with connection() as conn:
+            row=conn.execute('INSERT INTO approvals(tenant_id,requester,question,status) VALUES (%s,%s,%s,%s) RETURNING id',(p.tenant,p.subject,body.question,'pending')).fetchone()
+            audit(conn,p.subject,p.tenant,'approval_requested',{'id':str(row['id'])})
+        return {'answer':'This request requires administrator approval before any action. Open the Approvals tab to review it.','sources':[],'status':'pending_approval','approval_id':str(row['id'])}
+    conversation_id = body.conversation_id or uuid.uuid4()
+    prior= history(p.tenant, conversation_id)
+    result = chat(p,body.question,prior)
+    save_turn(p.tenant,conversation_id,body.question,result['answer'])
+    if result.get('answer')=='The response was blocked by the sensitive-data output guardrail.':
+        with connection() as conn:
+            audit(conn,p.subject,p.tenant,'guardrail_output_blocked',{'conversation_id':str(conversation_id)})
+        result['status']='guardrail_blocked'
+        result['sources']=[]
+    return {**result,'conversation_id':str(conversation_id)}
+
+
+@app.get('/api/conversations/{conversation_id}/message')
+def conversation_messages(conversation_id:uuid.UUID, p:Principal=Depends(principal)):
+    return {'conversation_id':str(conversation_id),'messages':list_messages(p.tenant, conversation_id)}
+
+@app.post('/api/feedback')
+def feedback(body:Feedback, p:Principal=Depends(principal)):
+    with connection() as conn:
+        conn.execute('INSERT INTO feedback(tenant_id,actor,rating,note) VALUES (%s,%s,%s,%s)',
+                     (p.tenant,p.subject,body.rating,body.note))
+    return {'saved':True}
+
+@app.get('/api/admin/metrics')
+def metrics(p:Principal=Depends(principal)):
+    with connection() as conn:
+        docs=conn.execute('SELECT status,count(*) AS total FROM documents WHERE tenant_id=%s GROUP BY status',(p.tenant,)).fetchall()
+        fb=conn.execute('SELECT rating,count(*) AS total FROM feedback WHERE tenant_id=%s GROUP BY rating',(p.tenant,)).fetchall()
+    return {'documents':docs,'feedback':fb}
+
+@app.get('/api/approvals')
+def list_approvals(p:Principal=Depends(principal)):
+    if not p.admin: raise HTTPException(403,'Admin only')
+    with connection() as conn:
+        rows=conn.execute("SELECT id,requester,question,status,reviewer,created_at,reviewed_at FROM approvals WHERE tenant_id=%s ORDER BY created_at DESC LIMIT 100",(p.tenant,)).fetchall()
+    return {'approvals':rows}
+
+@app.post('/api/approvals/{approval_id}/decision')
+def decide(approval_id:uuid.UUID,body:ApprovalDecision,p:Principal=Depends(principal)):
+    if not p.admin: raise HTTPException(403,'Admin only')
+    with connection() as conn:
+        row=conn.execute("UPDATE approvals SET status=%s,reviewer=%s,reviewed_at=now() WHERE id=%s AND tenant_id=%s AND status='pending' RETURNING id",('approved' if body.approve else 'rejected',p.subject,approval_id,p.tenant)).fetchone()
+        if not row: raise HTTPException(404,'Pending approval not found')
+        audit(conn,p.subject,p.tenant,'approval_decided',{'id':str(approval_id),'approved':body.approve})
+    # Approval is a decision record only; it never automatically executes a destructive action.
+    return {'status':'approved' if body.approve else 'rejected','executed':False}
