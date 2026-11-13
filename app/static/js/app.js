@@ -22,7 +22,7 @@ const api=async(path,options={})=>{
   return data;
 };
 
-$('newChat').onclick=()=>{conversationId=crypto.randomUUID();sessionStorage.setItem('atlas_conversation_id',conversationId);$('messages').replaceChildren();toast('Started a new conversation')};
+$('newChat').onclick=()=>{conversationId=crypto.randomUUID();sessionStorage.setItem('atlas_conversation_id',conversationId);$('messages').replaceChildren();toast('Started a new conversation');loadHistory()};
 
 /* ---------- Navigation ---------- */
 const TITLES={chat:"Ask your organization's knowledge",docs:'Document management',approval:'Approval requests',admin:'Operational overview'};
@@ -65,6 +65,7 @@ $('chatForm').onsubmit=async e=>{
     const r=await api('/api/chat',{method:'POST',body:JSON.stringify({question:q,conversation_id:conversationId})});
     loading.remove();
     const m=addMessage(r.answer,'assistant',r.sources||[]);
+    loadHistory();
     if(r.status==='pending_approval'){
       const b=el('button','','Review approval request');b.onclick=()=>view('approval');m.append(b);
     }
@@ -72,6 +73,31 @@ $('chatForm').onsubmit=async e=>{
 };
 $('question').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('chatForm').requestSubmit()}});
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('question').value=b.dataset.q;$('question').focus()});
+
+/* ---------- Conversation history ---------- */
+async function loadHistory(){
+  const root=$('history');
+  try{
+    const {conversations}=await api('/api/conversations');
+    root.replaceChildren();
+    if(!conversations.length){root.append(el('p','history-empty','No conversations yet'));return}
+    for(const c of conversations){
+      const b=el('button','history-item'+(c.id===conversationId?' active':''));
+      b.title=c.title;
+      b.append(el('span','history-title',c.title),el('span','history-date',new Date(c.updated_at).toLocaleDateString()));
+      b.onclick=()=>openConversation(c.id);
+      root.append(b);
+    }
+  }catch(e){root.replaceChildren(el('p','history-empty','History unavailable'))}
+}
+const showMessages=list=>(list||[]).forEach(m=>addMessage(m.content,m.role==='user'?'user':'assistant'));
+async function openConversation(id){
+  conversationId=id;sessionStorage.setItem('atlas_conversation_id',id);
+  view('chat');$('messages').replaceChildren();
+  try{showMessages((await api(`/api/conversations/${encodeURIComponent(id)}/message`)).messages)}
+  catch(e){toast(e.message)}
+  loadHistory();
+}
 
 /* ---------- Documents ---------- */
 const STATUS={ready:['Ready','ready'],failed:['Failed','failed'],pending:['Waiting','pending'],processing:['Processing','processing'],retired:['Retired','retired']};
@@ -198,3 +224,7 @@ async function loadApprovals(){
     }
   }catch(e){root.className='empty-note';root.textContent=`Could not load approvals: ${e.message}`;console.error('Approvals loading failed:',e)}
 }
+
+/* ---------- Startup ---------- */
+loadHistory();
+api(`/api/conversations/${encodeURIComponent(conversationId)}/message`).then(r=>showMessages(r.messages)).catch(()=>{});

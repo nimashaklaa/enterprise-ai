@@ -199,3 +199,22 @@ def guardrail_metrics(p:Principal=Depends(principal)):
             WHERE tenant_id=%s AND action IN ('guardrail_input_blocked','guardrail_output_blocked')
             GROUP BY action ORDER BY action""",(p.tenant,)).fetchall()
     return {'events':rows,'mode':'deterministic_demo','managed_bedrock_guardrails':False}
+
+@app.get('/api/conversations')
+def list_conversations(p: Principal = Depends(principal)):
+    with connection() as conn:
+        rows = conn.execute("""
+            SELECT conversation_id,
+                   (array_agg(content ORDER BY id) FILTER (WHERE role = 'user'))[1] AS title,
+                   max(created_at) AS updated_at
+            FROM chat_messages
+            WHERE tenant_id = %s
+            GROUP BY conversation_id
+            ORDER BY max(created_at) DESC
+            LIMIT 30""", (p.tenant,)).fetchall()
+    return {'conversations': [
+        {'id': str(r['conversation_id']),
+         'title': (r['title'] or 'New conversation')[:80],
+         'updated_at': r['updated_at']}
+        for r in rows
+    ]}

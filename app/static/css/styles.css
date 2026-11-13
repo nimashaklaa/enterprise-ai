@@ -257,3 +257,14 @@ pre {
 .bar > span.ok { background: #1f9d55; } .bar > span.bad { background: #d14343; } .bar > span.warn { background: #d99a1c; } .bar > span.info { background: var(--accent); } .bar > span.muted { background: #9aa4b2; }
 .pct { display: inline-block; min-width: 38px; color: var(--ink-3); }
 @media (max-width: 760px) { .metric-sections { grid-template-columns: 1fr; } .bar { width: 80px; } }
+
+/* Conversation history */
+.sidebar .history-label { margin-top: 22px; }
+.history { display: flex; flex-direction: column; gap: 2px; max-height: 45vh; overflow-y: auto; margin-bottom: 12px; }
+.history-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 8px 10px; font-weight: 400; }
+.history-item:hover { background: var(--surface-2); }
+.history-item.active { background: var(--accent-soft); }
+.history-title { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; color: var(--ink); }
+.history-date { font-size: 12px; color: var(--ink-3); }
+.history-empty { margin: 0; padding: 0 10px; font-size: 13px; color: var(--ink-3); }
+@media (max-width: 760px) { .history, .history-label { display: none; } }
