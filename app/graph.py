@@ -1,6 +1,6 @@
 from app.observability import trace
-from typing import TypeDict,Any
-from langgraph import stateGraph, START, END
+from typing import TypedDict,Any
+from langgraph.graph import StateGraph, START, END
 from app.aws import answer,embed
 from app.vector import search
 from app.config import settings
@@ -8,7 +8,7 @@ from app.guardrails import check_input,check_output
 
 
 
-class State(TypeDict, total=False):
+class State(TypedDict, total=False):
     question:str
     principal: Any
     passages:list
@@ -51,7 +51,7 @@ def validate(s):
     return {'answer':check_output(s['answer'])}
 
 def make_graph():
-    g= stateGraph(State)
+    g= StateGraph(State)
     for name,fn in [('guard',guard),('retrieve',retrieve),('no_evidence',no_evidence),('generate',generate),('validate',validate)]:g.add_node(name,fn)
     g.add_edge(START,'guard');g.add_edge('guard','retrieve')
     g.add_conditional_edges('retrieve',route,{'generate':'generate','no_evidence':'no_evidence'})
