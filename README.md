@@ -49,21 +49,44 @@ This project combines a FastAPI backend, LangGraph-based reasoning flows, Postgr
 
 ## Architecture
 
+### Platform and data flow
+
 ```mermaid
 flowchart LR
     User[User / Admin] --> UI[Web UI]
     UI --> API[FastAPI API]
-    API --> Agent[LangGraph Agent]
-    Agent --> Guardrails[Input + Output Guardrails]
-    Agent --> Vector[Pinecone Vector Search]
-    Agent --> Bedrock[Amazon Bedrock Models]
-    UI --> S3[Amazon S3 Storage]
-    S3 --> Worker[Async Ingestion Worker]
-    Worker --> Vector
-    Worker --> Postgres[(PostgreSQL)]
-    Agent --> Postgres
-    Agent --> Rius[GlassFlow Rius]
-    Agent --> Approval[Human-in-the-loop approvals]
+    API -->|Chat request| Guard[Input classification]
+    Guard -->|Allowed| Agent[LangGraph RAG workflow]
+    Guard -->|Sensitive action| Approval[HITL approval queue]
+    UI -->|Presigned upload| S3[Amazon S3]
+    S3 --> Worker[Document ingestion worker]
+    Worker -->|Embeddings| Pinecone[(Pinecone)]
+    Worker -->|Status and metadata| Postgres[(PostgreSQL)]
+    Agent -->|Authorized semantic search| Pinecone
+    Agent -->|Conversation history| Postgres
+    API -->|Save turns, audit, metrics| Postgres
+    Agent -.->|Traces| Rius[GlassFlow Rius]
+    Approval -->|Admin review| UI
+```
+
+### LangGraph agent workflow
+
+Each chat request first passes the API's input classification. Allowed requests enter the graph below; retrieval is tenant- and access-scoped, and generation only runs when relevant evidence is found.
+
+```mermaid
+flowchart TD
+    Start((Start)) --> Guard[Input guard]
+    Guard --> Retrieve[Retrieve authorized passages<br/>from Pinecone]
+    Retrieve --> HasEvidence{Relevant passages found?}
+    HasEvidence -->|No| NoEvidence[Return no-evidence response]
+    HasEvidence -->|Yes| Generate[Generate answer with<br/>Bedrock and conversation history]
+    Generate --> Validate[Output safety validation]
+    Validate --> End((Return answer and citations))
+    NoEvidence --> End
+    Guard -.->|Tracing| Rius[GlassFlow Rius]
+    Retrieve -.->|Tracing| Rius
+    Generate -.->|Tracing| Rius
+    Validate -.->|Tracing| Rius
 ```
 
 ## Core capabilities
