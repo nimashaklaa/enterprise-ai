@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/styles.css?v=pro-1">
+  <link rel="stylesheet" href="/static/css/styles.css?v=pro-4">
 </head>
 <body>
   <div class="shell">
@@ -90,15 +90,19 @@
       </section>
 
       <section id="adminView" class="panel hidden">
-        <h2>Workspace metrics</h2>
-        <pre id="metrics">Loading metrics...</pre>
-        <h2>Guardrail events</h2>
-        <pre id="guardrailMetrics">Loading guardrail metrics...</pre>
+        <div class="section-header">
+          <div>
+            <h2>Workspace metrics</h2>
+            <p>Document processing, answer feedback and guardrail activity for this workspace.</p>
+          </div>
+          <button type="button" id="refreshMetrics">Refresh</button>
+        </div>
+        <div id="metrics" class="metric-sections">Loading metrics...</div>
       </section>
 
       <div id="toast" role="status"></div>
     </main>
   </div>
-  <script src="/static/js/app.js?v=pro-1"></script>
+  <script src="/static/js/app.js?v=pro-4"></script>
 </body>
 </html>
