@@ -47,7 +47,7 @@ jobs:
     name: Continuous Delivery
     needs: integration
     runs-on: ubuntu-latest
-    environment: production
+    environment: production_1
 
     steps:
       - name: Checkout Code
