@@ -59,7 +59,7 @@ function addMessage(content,kind,sources=[]){
 $('chatForm').onsubmit=async e=>{
   e.preventDefault();
   const q=$('question').value.trim();if(!q)return;
-  addMessage(q,'user');$('question').value='';
+  addMessage(q,'user');$('question').value='';autosize();
   const loading=addMessage('Searching your documents...','assistant');
   try{
     const r=await api('/api/chat',{method:'POST',body:JSON.stringify({question:q,conversation_id:conversationId})});
@@ -71,6 +71,8 @@ $('chatForm').onsubmit=async e=>{
     }
   }catch(err){loading.textContent=err.message}
 };
+const autosize=()=>{const t=$('question');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,160)+'px'};
+$('question').addEventListener('input',autosize);
 $('question').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('chatForm').requestSubmit()}});
 document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>{$('question').value=b.dataset.q;$('question').focus()});
 
