@@ -13,6 +13,10 @@ This project combines a FastAPI backend, LangGraph-based reasoning flows, Postgr
 - Multi-tenant ready architecture with audit logs and usage metrics
 - Observability hooks for tracing, metrics, and debugging
 
+## Live demo
+
+The application is deployed on AWS: [Open the live demo](http://13.60.34.236:8000/).
+
 ## Demo gallery
 
 <p align="center">
@@ -138,13 +142,41 @@ flowchart TD
 ├── infra/
 │   ├── schema.sql           # PostgreSQL schema
 │   └── migrations/
+├── .github/
+│   └── workflows/
+│       └── cicd.yaml        # CI, ECR image publishing, and EC2 deployment
 ├── scripts/
 │   └── init_db.py           # Schema initialization utility
 ├── demo_results_ui/         # Screenshots used in this README
+├── Dockerfile               # Application container image
 ├── requirements.txt
 ├── LICENSE
 └── README.md
 ```
+
+## CI/CD deployment on AWS
+
+The GitHub Actions workflow at `.github/workflows/cicd.yaml` builds and deploys the application as a Docker container on an EC2 instance:
+
+1. **Continuous integration:** On a GitHub-hosted Ubuntu runner, installs Python 3.11 and checks Python syntax with `compileall`.
+2. **Build and publish:** After CI succeeds, configures AWS credentials, builds the image using the repository's `Dockerfile`, and pushes it to the configured private Amazon ECR repository. Each image is tagged with the commit SHA.
+3. **Deploy to EC2:** After the image is pushed, a self-hosted Linux x64 GitHub Actions runner on EC2 (labeled `atlas-ec2`) pulls that commit's image from ECR. The workflow replaces the `atlas-enterprise-ai` container, maps port `8000`, sets it to restart unless stopped, and checks that the container is running and the app responds at `http://127.0.0.1:8000/`.
+
+The workflow runs on pushes to `main` (README-only changes are ignored) and can also be started manually with **workflow_dispatch**. The build and deployment jobs use the GitHub Actions environment named `production_1`.
+
+### AWS and GitHub Actions setup
+
+- Create a private ECR repository and set `ECR_REPOSITORY_NAME` to its name.
+- Set up an EC2 instance as a self-hosted GitHub Actions runner with the labels `self-hosted`, `linux`, `x64`, and `atlas-ec2`. The runner needs Docker installed and running, network access to ECR, and permission to run Docker commands.
+- In the `production_1` GitHub Actions environment, configure the following repository/environment secrets. The workflow validates all listed secrets before replacing the running container:
+  - AWS and registry: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `ECR_REPOSITORY_NAME`
+  - Application AWS/S3: `S3_BUCKET`
+  - Bedrock: `BEDROCK_EMBED_MODEL`, `BEDROCK_CHAT_MODEL`, `EMBED_DIM`
+  - Pinecone: `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_CLOUD`, `PINECONE_REGION`, `PINECONE_READY_TIMEOUT`
+  - Database: `DATABASE_URL`
+  - Observability: `RIUS_API_KEY`, `RIUS_SERVICE_NAME`, `RIUS_DISABLED`, `RIUS_CAPTURE_CONTENT`
+  - Application settings: `HITL_ENABLED`, `MEMORY_TURNS`
+- Ensure the AWS credentials allow the workflow to authenticate to ECR and push/pull images, and allow the application to access its configured AWS services. Store credentials in GitHub Actions secrets; do not commit them to the repository.
 
 ## Quick start
 
