@@ -1,7 +1,3 @@
-import re
-
-from httpx2 import get
-
 from app.observability import trace
 import logging
 import time
@@ -39,8 +35,9 @@ def index():
     if int(info.dimension)!=s.embed_dim:
         raise ValueError(f'Pinecone index {name} dimension={info.dimension}, expected {s.embed_dim}. '
                          'Use a different index name or matching EMBED_DIM.')
-    if str(info.matric).lower()!='cosine':
-        raise ValueError(f'Pinecone index {name} must use cosine metric, got {info.metric}')
+    metric = str(getattr(info.metric, 'value', info.metric)).lower()
+    if metric != 'cosine':
+        raise ValueError(f'Pinecone index {name} must use cosine metric, got {metric}')
     deadline = time.monotonic()+ s.pinecone_ready_timeout
     while not pc.describe_index(name).status['ready']:
         if time.monotonic()>=deadline:

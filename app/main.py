@@ -85,7 +85,7 @@ def ready():
         with connection() as conn: conn.execute('SELECT 1').fetchone()
         return {'status':'ready'}
     except Exception as exc:
-        raise HTTPException(503,'Database unavailable') from exec
+        raise HTTPException(503,'Database unavailable') from exc
 
 @app.post('/api/documents/uploads')
 def create_upload(body:Upload,p:Principal=Depends(principal) ):
@@ -119,7 +119,7 @@ def complete_upload(body:CompleteUpload, p:Principal=Depends(principal)):
     try:
         process_s3_key(row['s3_key'])
     except Exception as exc:
-        raise HTTPException(502,'Ingestion failed. Check server logs and document status.') from exec
+        raise HTTPException(502,'Ingestion failed. Check server logs and document status.') from exc   # change this
     return{'status':'ready'}
 
 @app.get('/api/documents')
