@@ -99,7 +99,7 @@ jobs:
     steps:
 
       # ----------------------------------------
-      # AWS AUTHENTICATION
+      # AWS AUTHENTICATION.
       # ----------------------------------------
 
       - name: Configure AWS Credentials
