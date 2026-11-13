@@ -1,232 +1,194 @@
-# Enterprise AI Platform (`enterprise-ai`)
+# Enterprise AI Platform
 
-An enterprise-grade, secure, and scalable **RAG (Retrieval-Augmented Generation) & Agentic AI Platform** built with FastAPI, LangGraph, Amazon Bedrock, Pinecone, and PostgreSQL. It features robust guardrails, asynchronous document ingestion, multi-tenant user interfaces, Human-in-the-Loop (HITL) workflows, and deep observability.
+An enterprise-grade, secure RAG and agentic AI platform for document intelligence, multi-tenant chat, policy-aware approvals, and operational observability.
 
----
+This project combines a FastAPI backend, LangGraph-based reasoning flows, PostgreSQL metadata storage, Pinecone vector search, and Amazon Bedrock models into a single workspace for enterprise knowledge assistants.
 
-## 🏗️ System Architecture
+## Highlights
 
-The architecture follows a decoupled microservices-ready pattern featuring a React/HTML frontend, FastAPI backend core running LangGraph agent workflows, asynchronous ingestion workers, and managed cloud storage/databases.
+- Document upload and ingestion pipeline for PDF, DOCX, TXT, and Markdown files
+- Retrieval-augmented generation over indexed enterprise content
+- Guardrails for prompt injection, sensitive output review, and blocked actions
+- Human-in-the-loop approval flow for risky or policy-sensitive requests
+- Multi-tenant ready architecture with audit logs and usage metrics
+- Observability hooks for tracing, metrics, and debugging
+
+## Demo gallery
+
+<p align="center">
+  <img src="./demo_results_ui/chat.png" alt="Chat interface" width="820" />
+</p>
+
+<p align="center">
+  <img src="./demo_results_ui/document upload.png" alt="Document upload flow" width="820" />
+</p>
+
+<p align="center">
+  <img src="./demo_results_ui/approval_request.png" alt="Approval request" width="820" />
+</p>
+
+<p align="center">
+  <img src="./demo_results_ui/guardrails_bloacked.png" alt="Guardrail blocked response" width="820" />
+</p>
+
+<p align="center">
+  <img src="./demo_results_ui/metrics.png" alt="Metrics dashboard" width="820" />
+</p>
+
+<p align="center">
+  <img src="./demo_results_ui/pinecone.png" alt="Pinecone vector index" width="820" />
+</p>
+
+<p align="center">
+  <img src="./demo_results_ui/s3_bucket.png" alt="S3 bucket storage" width="820" />
+</p>
+
+<p align="center">
+  <img src="./demo_results_ui/db_schemas.png" alt="Database schema overview" width="820" />
+</p>
+
+## Architecture
 
 ```mermaid
-graph TD
-    %% Users & Frontend
-    User([Users / Clients]) -->|HTTPS / REST API| Frontend[Web Browser UI / React]
-
-    %% Backend & Core
-    Frontend -->|API Requests| FastAPI[FastAPI Backend Server]
-    FastAPI --> LangGraph[Application Core: LangGraph Agent Workflow]
-
-    %% LangGraph Sub-pipeline
-    subgraph LangGraph Core [Application Core]
-        InputG[Input Guardrails] --> Agent[LangGraph Agent Workflow]
-        Agent --> Tools[Tools & Integrations]
-        Agent --> OutputG[Output Guardrails]
-        OutputG --> Response[Response Generation]
-    end
-
-    %% Storage & Databases & Services
-    Frontend -->|Presigned URL Upload| S3[(Amazon S3 File Storage)]
-    S3 --> IngestionWorker[Ingestion Worker worker/ingest.py]
-    IngestionWorker -->|Store Embeddings| Pinecone[(Pinecone Vector DB)]
-    IngestionWorker -->|Update Status| Postgres[(PostgreSQL Database)]
-    
-    Agent -->|Vector Search| Pinecone
-    Agent -->|App Data & Memory| Postgres
-    Agent -->|LLM Inference & Embeddings| Bedrock[Amazon Bedrock LLMs]
-
-    %% Observability & HITL
-    LangGraph -.->|Traces, Metrics, Logs| Rius[GlassFlow Rius Observability]
-    Agent -.->|HITL Requests| HITL[Human-in-the-Loop Approval Flow]
-
+flowchart LR
+    User[User / Admin] --> UI[Web UI]
+    UI --> API[FastAPI API]
+    API --> Agent[LangGraph Agent]
+    Agent --> Guardrails[Input + Output Guardrails]
+    Agent --> Vector[Pinecone Vector Search]
+    Agent --> Bedrock[Amazon Bedrock Models]
+    UI --> S3[Amazon S3 Storage]
+    S3 --> Worker[Async Ingestion Worker]
+    Worker --> Vector
+    Worker --> Postgres[(PostgreSQL)]
+    Agent --> Postgres
+    Agent --> Rius[GlassFlow Rius]
+    Agent --> Approval[Human-in-the-loop approvals]
 ```
 
----
+## Core capabilities
 
-## 🗄️ Database ER Diagram
+### Secure document workflow
 
-The current PostgreSQL schema is defined in [infra/schema.sql](infra/schema.sql). Each tenant-scoped table has a foreign key to `tenants.id`. `conversation_id` groups messages within `chat_messages` and is not a foreign key. For an existing database, apply [the tenant foreign-key migration](infra/migrations/001_tenant_foreign_keys.sql); it registers existing tenant IDs before adding the constraints. External tenant provisioning must insert each tenant into `tenants` before writing that tenant's records.
+- Direct browser upload flow with presigned S3 URLs
+- File validation for PDF, DOCX, TXT, and Markdown uploads
+- Background ingestion worker to chunk and embed document content
+- Per-tenant document metadata and status tracking
 
-```mermaid
-erDiagram
-    TENANTS {
-        text id PK
-        timestamptz created_at
-    }
+### RAG and agentic chat
 
-    DOCUMENTS {
-        uuid id PK
-        text tenant_id FK
-        text title
-        text owner_sub
-        text[] allowed_groups
-        text s3_key UK
-        text status
-        integer current_version
-        timestamptz created_at
-    }
+- Query classification and guardrail checks before processing
+- Semantic retrieval using Pinecone vector indexes
+- Context-aware responses grounded in enterprise documents
+- Conversation memory across short-turn chat sessions
 
-    FEEDBACK {
-        bigint id PK
-        text tenant_id FK
-        text actor
-        integer rating
-        text note
-        timestamptz created_at
-    }
+### Governance and safety
 
-    AUDIT_EVENTS {
-        bigint id PK
-        text actor
-        text tenant_id FK
-        text action
-        jsonb detail
-        timestamptz created_at
-    }
+- Input blocking for prompt-injection or policy-sensitive prompts
+- Output guardrails to prevent leakage of sensitive data
+- Approval step for risky actions such as policy updates or destructive operations
+- Audit events and tenant-scoped metadata for traceability
 
-    APPROVALS {
-        uuid id PK
-        text tenant_id FK
-        text requester
-        text question
-        text status
-        text reviewer
-        timestamptz created_at
-        timestamptz reviewed_at
-    }
+### Observability
 
-    CHAT_MESSAGES {
-        bigint id PK
-        text tenant_id FK
-        uuid conversation_id
-        text role
-        text content
-        timestamptz created_at
-    }
+- Structured traces and metrics around agent execution
+- LLM latency and token visibility through observability integrations
+- Dashboard-friendly feedback and ingestion status reporting
 
-    TENANTS ||--o{ DOCUMENTS : has
-    TENANTS ||--o{ FEEDBACK : has
-    TENANTS ||--o{ AUDIT_EVENTS : has
-    TENANTS ||--o{ APPROVALS : has
-    TENANTS ||--o{ CHAT_MESSAGES : has
+## Repository structure
+
+```text
+.
+├── app/
+│   ├── main.py               # FastAPI application and routes
+│   ├── config.py             # Environment configuration
+│   ├── db.py                 # Database helpers
+│   ├── rag.py                # Retrieval + chat logic
+│   ├── guardrails.py         # Safety and input validation
+│   ├── memory.py             # Conversation memory helpers
+│   ├── aws.py                # AWS / Bedrock / S3 integration
+│   ├── vector.py             # Pinecone wrapper
+│   ├── observability.py      # Tracing / metrics integration
+│   └── static/              # Frontend assets
+├── worker/
+│   └── ingest.py            # Async document ingestion job
+├── infra/
+│   ├── schema.sql           # PostgreSQL schema
+│   └── migrations/
+├── scripts/
+│   └── init_db.py           # Schema initialization utility
+├── demo_results_ui/         # Screenshots used in this README
+├── requirements.txt
+├── LICENSE
+└── README.md
 ```
 
----
+## Quick start
 
-## 🚀 Key Features & Components
+### 1. Clone the repository
 
-### 1. Frontend & User Interface (`Users`)
-
-* **Web Browser UI**: Built with React/HTML+JS supporting multi-tenant access.
-
-
-* **Capabilities**: Document chat (RAG + Agentic AI), file uploads, real-time document status viewing, HITL approval dashboards, and admin metrics/logs viewing.
-
-
-
-### 2. Backend API (`FastAPI`)
-
-* Exposes clean REST endpoints for core operations:
-
-
-* `/api/chat`: Handles conversational RAG and agent interactions.
-* `/api/upload-url`: Generates presigned URLs for direct browser-to-S3 uploads.
-* `/api/ingest`: Triggers document processing workflows.
-* `/api/documents`: Manages document states and metadata.
-* `/api/approvals`: Handles Human-in-the-Loop (HITL) request workflows.
-* `/api/metrics`: Exposes system and usage metrics.
-
-
-
-### 3. Application Core (`LangGraph Agent Workflow`)
-
-* **Input Guardrails**: Prompt injection detection, sensitive query blocking, PII detection, and HITL action detection.
-
-
-* **Agent Workflow**: Handles query understanding, multi-step retrieval, tool usage, memory persistence in PostgreSQL, and structured output generation.
-
-
-* **Output Guardrails**: Sensitive information filtering, hallucination control, citation validation, and tenant-specific rules.
-
-
-
-### 4. Storage & Ingestion Pipeline
-
-* **Amazon S3**: Secure raw document storage with direct browser uploads via presigned URLs.
-
-
-* **Ingestion Worker (`worker/ingest.py`)**: Asynchronously downloads from S3, extracts text (PDF, TXT), chunks content, generates embeddings via Amazon Titan, indexes them in Pinecone, and logs status to PostgreSQL.
-
-
-
-### 5. Databases & LLMs
-
-* **Pinecone Vector Database**: High-performance semantic similarity search and auto-scaling index management.
-
-
-* **PostgreSQL**: Stores relational metadata including documents, chat history/memory, approval requests, feedback, audit events, and guardrail logs.
-
-
-* **Amazon Bedrock**: Powers LLM reasoning and embedding generation using models like Claude, Nova, and Titan.
-
-
-
-### 6. Observability & Governance
-
-* **GlassFlow Rius**: Real-time tracing of LangGraph workflows, LLM token/latency tracking, error debugging, and OpenTelemetry integration.
-
-
-* **Human-in-the-Loop (HITL)**: Safeguards sensitive actions (e.g., restricted file deletions or policy triggers) by routing them through administrator approval queues before execution.
-
-
-
----
-
-## 🛠️ Quick Start Guide
-
-1. **Clone the Repository**:
 ```bash
 git clone https://github.com/nimashaklaa/enterprise-ai.git
 cd enterprise-ai
-
 ```
 
+### 2. Create a virtual environment and install dependencies
 
-2. **Set up Python Environment**:
 ```bash
 python3 -m venv atlas
 source atlas/bin/activate
 pip install -r requirements.txt
-
 ```
 
+### 3. Configure environment variables
 
-3. **Configure Environment Variables**:
-Copy `.env.example` to `.env` in the root directory, then replace the placeholder values with your AWS, Pinecone, PostgreSQL, and observability settings. `.env.example` lists the supported environment variables; never commit real credentials.
+Create a `.env` file in the project root and set the required values for AWS, database, Bedrock, Pinecone, and observability.
+
 ```env
-AWS_ACCESS_KEY=your_aws_access_key
-AWS_SECRET_KEY=your_aws_secret_key
-PINECONE_API_KEY=your_pinecone_api_key
-DATABASE_URL=postgresql://user:password@localhost:5432/enterprise_ai
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 AWS_REGION=us-east-1
 S3_BUCKET=your_s3_bucket
-BEDROCK_EMBED_MODEL=your_bedrock_embedding_model_id
-BEDROCK_CHAT_MODEL=your_bedrock_chat_model_id
-EMBEDDING_DIMENSION=1024
-PINECONE_INDEX_HOST=your_pinecone_index_host
+
+DATABASE_URL=postgresql://user:password@host:5432/enterprise_ai
+
+BEDROCK_EMBED_MODEL=amazon.titan-embed-text-v2:0
+BEDROCK_CHAT_MODEL=amazon.nova-lite-v1:0
+EMBED_DIM=1024
+
+PINECONE_API_KEY=your_pinecone_api_key
+PINECONE_INDEX_NAME=atlas-enterprise-ai-index
 PINECONE_CLOUD=aws
 PINECONE_REGION=us-east-1
-PINECONE_READY_TIMEOUT=60
-RUIS_API_KEY=your_rius_api_key
-RUIS_SERVICE_NAME=enterprise-ai
-RUIS_DISABLED=false
-RUIS_CAPTURE_CONTENT=false
+PINECONE_READY_TIMEOUT=180
 
+HITL_ENABLED=true
+MEMORY_TURNS=6
 ```
 
+### 4. Initialize the database schema
 
-4. **Run the FastAPI Backend**:
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-
+python scripts/init_db.py
 ```
+
+### 5. Run the API server
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The app will be available at:
+
+- Frontend: http://localhost:8000/
+- API docs: http://localhost:8000/api/docs
+
+## Notes
+
+- This project is designed for a demo and enterprise prototype workflow, not a production-ready replacement for a full platform stack.
+- The application expects AWS, Postgres, and Pinecone credentials to be valid before uploading and querying documents.
+- The ingestion pipeline automatically processes uploaded files once the upload is marked complete via the API.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
