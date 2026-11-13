@@ -5,7 +5,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.observability import initialize
 from app.demo_context import principal, Principal
 from app.aws import client
@@ -15,12 +15,25 @@ from app.rag import chat
 from app.guardrails import check_input, classify_input
 from app.memory import history, save_turn, list_messages
 from worker.ingest import process_s3_key
-
+from contextlib import asynccontextmanager
 
 initialize()
 
+def ensure_tenant(tenant_id: str):
+    with connection() as conn:
+        conn.execute(
+            'INSERT INTO tenants(id) VALUES (%s) ON CONFLICT (id) DO NOTHING',
+            (tenant_id,),
+        )
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # runs once when the app starts
+    ensure_tenant('demo-workspace')
+    yield
+    # anything after yield runs when the app shuts down
 BASE= Path(__file__).resolve().parent
-app=FastAPI(title='Atlas ENterprise RAG', docs_url='/api/docs')
+app=FastAPI(title='Atlas ENterprise RAG', docs_url='/api/docs',lifespan=lifespan)
 # static: Where your CSS styles, images, and JavaScript files live.
 app.mount('/static', StaticFiles(directory=BASE/'static'),name='static')
 # Where your HTML web pages live.
@@ -37,8 +50,15 @@ class CompleteUpload(BaseModel):
     document_id:uuid.UUID
 
 class Ask(BaseModel):
-    question:str= Field(min_length=3, max_length=2000)
+    question:str= Field(min_length=1, max_length=2000)
     conversation_id:uuid.UUID|None=None
+    @field_validator('question')
+    @classmethod
+    def strip_question(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError('Question cannot be empty')
+        return v
 
 class Feedback(BaseModel):
     document_id:str|None=None
@@ -48,7 +68,8 @@ class Feedback(BaseModel):
 class ApprovalDecision(BaseModel):
     approve:bool
 
-@app.get('/', response_class=HTTPException)
+
+@app.get('/', response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse(
         'index.html',{'request': request,'region':settings().aws_region,'mode':'single-workspace demo'}
@@ -58,7 +79,7 @@ def home(request: Request):
 def live():
     return {'status':'alive'}
 
-@app.get('health/ready')
+@app.get('/health/ready')
 def ready():
     try:
         with connection() as conn: conn.execute('SELECT 1').fetchone()
@@ -113,6 +134,7 @@ def documents(p:Principal=Depends(principal)):
 @app.post('/api/chat')
 def ask(body: Ask,p:Principal=Depends(principal)):
     reason= classify_input(body.question)
+    
     if reason:
         with connection() as conn:
             audit(conn,p.subject,p.tenant,'guardrail_input_blocked',{'reason':reason})
